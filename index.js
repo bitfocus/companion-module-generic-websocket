@@ -6,12 +6,11 @@ class instance extends instance_skel {
 	constructor(system, id, config) {
 		super(system, id, config);
 
-		this.ws = null;
 		this.subscriptions = new Map();
 
 		this.actions();
 		this.initFeedbacks();
-		this.subscribeFeedbacks()
+		this.subscribeFeedbacks();
 
 		if (!this.config) {
 			return this;
@@ -22,34 +21,44 @@ class instance extends instance_skel {
 		return this;
 	}
 
+	destroy() {
+		if (this.ws !== undefined) {
+			this.ws.close(1000);
+			delete this.ws;
+		}
+	}
+
 	updateConfig(config) {
 		this.config = config;
-		this.setVariableDefinitions([{}]);
+		this.setVariableDefinitions([]);
 		this.initWebSocket();
 	}
 
 	initWebSocket() {
 		var ip = this.config.host;
 		var port = this.config.port;
-		this.status(this.STATUS_UNKNOWN)
+		this.status(this.STATUS_UNKNOWN);
 		if (!ip || !port) {
-			this.status(this.STATUS_ERROR)
+			this.status(this.STATUS_ERROR, `Configuration error - no WebSocket host and/or port defined`);
 			return;
+		}
+
+		if (this.ws !== undefined) {
+			this.ws.close(1000);
+			delete this.ws;
 		}
 		this.ws = new WebSocket(`ws://${ip}:${port}`);
 
 		this.ws.on('open', () => {
 			this.log('debug', `Connection opened`);
-			this.status(this.STATUS_OK)
+			this.status(this.STATUS_OK);
 		});
-		this.ws.on('close', () => {
-			this.log('debug', `Connection closed`);
-			this.status(this.STATUS_ERROR)
+		this.ws.on('close', (code) => {
+			this.log('debug', `Connection closed with code ${code}`);
+			this.status(this.STATUS_ERROR, `Connection closed with code ${code}`);
 		});
 
-		this.ws.on('message', (data) => {
-			this.messageReceivedFromWebSocket(data);
-		});
+		this.ws.on('message', this.messageReceivedFromWebSocket.bind(this));
 
 		this.ws.on('error', (data) => {
 			this.log('error', `WebSocket error: ${data}`);
@@ -57,7 +66,9 @@ class instance extends instance_skel {
 	}
 
 	messageReceivedFromWebSocket(data) {
-		this.log('debug', `Message received: ${data}`);
+		if (this.config.debug_messages) {
+			this.log('debug', `Message received: ${data}`);
+		}
 		var msgValue = null;
 		try {
 			msgValue = JSON.parse(data);
@@ -75,13 +86,6 @@ class instance extends instance_skel {
 				this.setVariable(subscription.variableName, typeof value === 'object' ? JSON.stringify(value) : value);
 			}
 		});
-	}
-
-	action(action) {
-		if (action.action === 'send_command') {
-			this.log('debug', `Message sent: ${action.options.data}`);
-			this.ws.send(action.options.data+"\r\n");
-		}
 	}
 
 	config_fields() {
@@ -107,6 +111,13 @@ class instance extends instance_skel {
 				tooltip: 'The port of the WebSocket server',
 				width: 6,
 				regex: this.REGEX_NUMBER
+			},
+			{
+				type: 'checkbox',
+				id: 'debug_messages',
+				label: 'Debug messages',
+				tooltip: 'Log incomming and outcomming messages',
+				width: 6
 			}
 		];
 	}
@@ -158,7 +169,13 @@ class instance extends instance_skel {
 						id: 'data',
 						default: ''
 					}
-				]
+				],
+				callback: (action) => {
+					if (this.config.debug_messages) {
+						this.log('debug', `Message sent: ${action.options.data}`);
+					}
+					this.ws.send(action.options.data+"\r\n");
+				}
 			}
 		});
 	}
