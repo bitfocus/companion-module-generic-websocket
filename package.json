@@ -18,5 +18,13 @@
 	"dependencies": {
 		"ws": "^7.2.1",
 		"object-path": "^0.11.4"
+	},
+	"homepage": "https://github.com/bitfocus/companion-module-generic-websocket#readme",
+	"bugs": {
+		"url": "https://github.com/bitfocus/companion-module-generic-websocket/issues"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/bitfocus/companion-module-generic-websocket.git"
 	}
 }
