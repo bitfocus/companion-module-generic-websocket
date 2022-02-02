@@ -1,6 +1,6 @@
 {
 	"name": "generic-websocket",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"api_version": "1.0.0",
 	"keywords": [
 		"Protocol",
@@ -16,8 +16,8 @@
 	"author": "Krzysztof Pyrkosz",
 	"license": "MIT",
 	"dependencies": {
-		"ws": "^7.2.1",
-		"object-path": "^0.11.4"
+		"object-path": "^0.11.4",
+		"ws": "^7.2.1"
 	},
 	"homepage": "https://github.com/bitfocus/companion-module-generic-websocket#readme",
 	"bugs": {
