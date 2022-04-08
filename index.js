@@ -30,7 +30,16 @@ class instance extends instance_skel {
 
 	updateConfig(config) {
 		this.config = config
-		this.setVariableDefinitions([])
+		var variableDefinitions = []
+		if (config.variables.trim()) {
+			config.variables.split(',').forEach((v) => {
+				variableDefinitions.push({
+					label: v.trim(),
+					name: v.trim(),
+				})
+			})
+		}
+		this.setVariableDefinitions(variableDefinitions)
 		this.initWebSocket()
 	}
 
@@ -119,6 +128,12 @@ class instance extends instance_skel {
 				label: 'Debug messages',
 				tooltip: 'Log incomming and outcomming messages',
 				width: 6,
+			},
+			{
+				type: 'textinput',
+				id: 'variables',
+				label: 'Variables',
+				tooltip: 'Comma separated list of variables',
 			},
 		]
 	}
