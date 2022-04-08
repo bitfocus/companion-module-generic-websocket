@@ -31,11 +31,11 @@ class instance extends instance_skel {
 	updateConfig(config) {
 		this.config = config
 		var variableDefinitions = []
-		if (config.variables.trim()) {
+		if (config.variables) {
 			config.variables.split(',').forEach((v) => {
 				variableDefinitions.push({
-					label: v.trim(),
-					name: v.trim(),
+					label: v,
+					name: v,
 				})
 			})
 		}
@@ -134,6 +134,7 @@ class instance extends instance_skel {
 				id: 'variables',
 				label: 'Variables',
 				tooltip: 'Comma separated list of variables',
+				regex: '/^[-a-zA-Z0-9_,]+$/',
 			},
 		]
 	}
