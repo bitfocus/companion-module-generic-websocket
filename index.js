@@ -16,9 +16,13 @@ class instance extends instance_skel {
 			return this
 		}
 
-		this.initWebSocket()
-
 		return this
+	}
+
+	init() {
+		this.initVariables()
+		this.resetVariables()
+		this.initWebSocket()
 	}
 
 	destroy() {
@@ -30,17 +34,37 @@ class instance extends instance_skel {
 
 	updateConfig(config) {
 		this.config = config
-		var variableDefinitions = []
-		if (config.variables) {
-			config.variables.split(',').forEach((v) => {
-				variableDefinitions.push({
-					label: v,
-					name: v,
-				})
-			})
-		}
-		this.setVariableDefinitions(variableDefinitions)
+		this.initVariables()
+		this.resetVariables()
 		this.initWebSocket()
+	}
+
+	getConfiguredVariables() {
+		if (this.config.variables) {
+			return this.config.variables.split(',')
+		}
+		return []
+	}
+
+	initVariables() {
+		var variableDefinitions = []
+		this.getConfiguredVariables().forEach((v) => {
+			variableDefinitions.push({
+				label: v,
+				name: v,
+			})
+		})
+		this.setVariableDefinitions(variableDefinitions)
+	}
+
+	resetVariables() {
+		if (this.config.reset_variables) {
+			var variables = {}
+			this.getConfiguredVariables().forEach((v) => {
+				variables[v] = ''
+			})
+			this.setVariables(variables)
+		}
 	}
 
 	initWebSocket() {
@@ -61,6 +85,7 @@ class instance extends instance_skel {
 		this.ws.on('open', () => {
 			this.log('debug', `Connection opened`)
 			this.status(this.STATUS_OK)
+			this.resetVariables()
 		})
 		this.ws.on('close', (code) => {
 			this.log('debug', `Connection closed with code ${code}`)
@@ -135,6 +160,14 @@ class instance extends instance_skel {
 				label: 'Variables',
 				tooltip: 'Comma separated list of variables',
 				regex: '/^[-a-zA-Z0-9_,]+$/',
+			},
+			{
+				type: 'checkbox',
+				id: 'reset_variables',
+				label: 'Reset variables',
+				tooltip: 'Reset variables on init and on connect',
+				width: 6,
+				default: true,
 			},
 		]
 	}
