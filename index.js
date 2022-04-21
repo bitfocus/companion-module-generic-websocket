@@ -67,7 +67,19 @@ class instance extends instance_skel {
 		}
 	}
 
+	maybeReconnect() {
+		if (this.config.reconnect) {
+			this.reconnect_timer = setTimeout(() => {
+				this.initWebSocket()
+			}, 5000)
+		}
+	}
+
 	initWebSocket() {
+		if (this.reconnect_timer) {
+			clearTimeout(this.reconnect_timer)
+			this.reconnect_timer = null
+		}
 		var ip = this.config.host
 		var port = this.config.port
 		this.status(this.STATUS_UNKNOWN)
@@ -90,12 +102,14 @@ class instance extends instance_skel {
 		this.ws.on('close', (code) => {
 			this.log('debug', `Connection closed with code ${code}`)
 			this.status(this.STATUS_ERROR, `Connection closed with code ${code}`)
+			this.maybeReconnect()
 		})
 
 		this.ws.on('message', this.messageReceivedFromWebSocket.bind(this))
 
 		this.ws.on('error', (data) => {
 			this.log('error', `WebSocket error: ${data}`)
+			this.maybeReconnect()
 		})
 	}
 
@@ -146,6 +160,14 @@ class instance extends instance_skel {
 				tooltip: 'The port of the WebSocket server',
 				width: 6,
 				regex: this.REGEX_NUMBER,
+			},
+			{
+				type: 'checkbox',
+				id: 'reconnect',
+				label: 'Reconnect',
+				tooltip: 'Reconnect on WebSocket error (after 5 secs)',
+				width: 6,
+				default: true,
 			},
 			{
 				type: 'checkbox',
