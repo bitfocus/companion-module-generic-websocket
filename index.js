@@ -39,6 +39,9 @@ class instance extends instance_skel {
 		let variables = new Set()
 		let defaultValues = {}
 		this.subscriptions.forEach((subscription, subscriptionId) => {
+			if (!subscription.variableName.match(/^[-a-zA-Z0-9_]+$/)) {
+				return;
+			}
 			variables.add(subscription.variableName)
 			if (callerId === null || callerId === subscriptionId) {
 				defaultValues[subscription.variableName] = ''
@@ -196,6 +199,7 @@ class instance extends instance_skel {
 						type: 'textinput',
 						label: 'Variable',
 						id: 'variable',
+						regex: '/^[-a-zA-Z0-9_]+$/',
 						default: '',
 					},
 				],
