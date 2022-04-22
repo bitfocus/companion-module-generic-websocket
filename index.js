@@ -14,10 +14,6 @@ class instance extends instance_skel {
 		this.initFeedbacks()
 		this.subscribeFeedbacks()
 
-		if (!this.config) {
-			return this
-		}
-
 		return this
 	}
 
@@ -37,13 +33,6 @@ class instance extends instance_skel {
 	updateConfig(config) {
 		this.config = config
 		this.initWebSocket()
-	}
-
-	getConfiguredVariables() {
-		if (this.config.variables) {
-			return this.config.variables.split(',')
-		}
-		return []
 	}
 
 	updateVariables(callerId = null) {
