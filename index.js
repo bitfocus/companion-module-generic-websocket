@@ -3,6 +3,8 @@ const WebSocket = require('ws')
 var objectPath = require('object-path')
 
 class instance extends instance_skel {
+	isInitialized = false
+
 	constructor(system, id, config) {
 		super(system, id, config)
 
@@ -20,9 +22,9 @@ class instance extends instance_skel {
 	}
 
 	init() {
-		this.initVariables()
-		this.resetVariables()
+		this.updateVariables()
 		this.initWebSocket()
+		this.isInitialized = true
 	}
 
 	destroy() {
@@ -34,8 +36,6 @@ class instance extends instance_skel {
 
 	updateConfig(config) {
 		this.config = config
-		this.initVariables()
-		this.resetVariables()
 		this.initWebSocket()
 	}
 
@@ -46,24 +46,25 @@ class instance extends instance_skel {
 		return []
 	}
 
-	initVariables() {
-		var variableDefinitions = []
-		this.getConfiguredVariables().forEach((v) => {
+	updateVariables(callerId = null) {
+		let variables = new Set()
+		let defaultValues = {}
+		this.subscriptions.forEach((subscription, subscriptionId) => {
+			variables.add(subscription.variableName)
+			if (callerId === null || callerId === subscriptionId) {
+				defaultValues[subscription.variableName] = ''
+			}
+		})
+		let variableDefinitions = []
+		variables.forEach((variable) => {
 			variableDefinitions.push({
-				label: v,
-				name: v,
+				label: variable,
+				name: variable,
 			})
 		})
 		this.setVariableDefinitions(variableDefinitions)
-	}
-
-	resetVariables() {
 		if (this.config.reset_variables) {
-			var variables = {}
-			this.getConfiguredVariables().forEach((v) => {
-				variables[v] = ''
-			})
-			this.setVariables(variables)
+			this.setVariables(defaultValues)
 		}
 	}
 
@@ -97,7 +98,9 @@ class instance extends instance_skel {
 		this.ws.on('open', () => {
 			this.log('debug', `Connection opened`)
 			this.status(this.STATUS_OK)
-			this.resetVariables()
+			if (this.config.reset_variables) {
+				this.updateVariables()
+			}
 		})
 		this.ws.on('close', (code) => {
 			this.log('debug', `Connection closed with code ${code}`)
@@ -177,13 +180,6 @@ class instance extends instance_skel {
 				width: 6,
 			},
 			{
-				type: 'textinput',
-				id: 'variables',
-				label: 'Variables',
-				tooltip: 'Comma separated list of variables',
-				regex: '/^[-a-zA-Z0-9_,]+$/',
-			},
-			{
 				type: 'checkbox',
 				id: 'reset_variables',
 				label: 'Reset variables',
@@ -222,6 +218,9 @@ class instance extends instance_skel {
 						variableName: feedback.options.variable,
 						subpath: feedback.options.subpath,
 					})
+					if (this.isInitialized) {
+						this.updateVariables(feedback.id)
+					}
 				},
 				unsubscribe: (feedback) => {
 					this.subscriptions.delete(feedback.id)
