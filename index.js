@@ -3,6 +3,8 @@ const WebSocket = require('ws')
 var objectPath = require('object-path')
 
 class instance extends instance_skel {
+	isInitialized = false
+
 	constructor(system, id, config) {
 		super(system, id, config)
 
@@ -12,13 +14,13 @@ class instance extends instance_skel {
 		this.initFeedbacks()
 		this.subscribeFeedbacks()
 
-		if (!this.config) {
-			return this
-		}
-
-		this.initWebSocket()
-
 		return this
+	}
+
+	init() {
+		this.updateVariables()
+		this.initWebSocket()
+		this.isInitialized = true
 	}
 
 	destroy() {
@@ -30,8 +32,32 @@ class instance extends instance_skel {
 
 	updateConfig(config) {
 		this.config = config
-		this.setVariableDefinitions([])
 		this.initWebSocket()
+	}
+
+	updateVariables(callerId = null) {
+		let variables = new Set()
+		let defaultValues = {}
+		this.subscriptions.forEach((subscription, subscriptionId) => {
+			if (!subscription.variableName.match(/^[-a-zA-Z0-9_]+$/)) {
+				return;
+			}
+			variables.add(subscription.variableName)
+			if (callerId === null || callerId === subscriptionId) {
+				defaultValues[subscription.variableName] = ''
+			}
+		})
+		let variableDefinitions = []
+		variables.forEach((variable) => {
+			variableDefinitions.push({
+				label: variable,
+				name: variable,
+			})
+		})
+		this.setVariableDefinitions(variableDefinitions)
+		if (this.config.reset_variables) {
+			this.setVariables(defaultValues)
+		}
 	}
 
 	maybeReconnect() {
@@ -64,6 +90,9 @@ class instance extends instance_skel {
 		this.ws.on('open', () => {
 			this.log('debug', `Connection opened`)
 			this.status(this.STATUS_OK)
+			if (this.config.reset_variables) {
+				this.updateVariables()
+			}
 		})
 		this.ws.on('close', (code) => {
 			this.log('debug', `Connection closed with code ${code}`)
@@ -142,6 +171,14 @@ class instance extends instance_skel {
 				tooltip: 'Log incomming and outcomming messages',
 				width: 6,
 			},
+			{
+				type: 'checkbox',
+				id: 'reset_variables',
+				label: 'Reset variables',
+				tooltip: 'Reset variables on init and on connect',
+				width: 6,
+				default: true,
+			},
 		]
 	}
 
@@ -162,6 +199,7 @@ class instance extends instance_skel {
 						type: 'textinput',
 						label: 'Variable',
 						id: 'variable',
+						regex: '/^[-a-zA-Z0-9_]+$/',
 						default: '',
 					},
 				],
@@ -173,6 +211,9 @@ class instance extends instance_skel {
 						variableName: feedback.options.variable,
 						subpath: feedback.options.subpath,
 					})
+					if (this.isInitialized) {
+						this.updateVariables(feedback.id)
+					}
 				},
 				unsubscribe: (feedback) => {
 					this.subscriptions.delete(feedback.id)
