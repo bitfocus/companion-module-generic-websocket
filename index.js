@@ -24,6 +24,11 @@ class instance extends instance_skel {
 	}
 
 	destroy() {
+		this.isInitialized = false
+		if (this.reconnect_timer) {
+			clearTimeout(this.reconnect_timer)
+			this.reconnect_timer = null
+		}
 		if (this.ws !== undefined) {
 			this.ws.close(1000)
 			delete this.ws
@@ -61,7 +66,10 @@ class instance extends instance_skel {
 	}
 
 	maybeReconnect() {
-		if (this.config.reconnect) {
+		if (this.isInitialized && this.config.reconnect) {
+			if (this.reconnect_timer) {
+				clearTimeout(this.reconnect_timer)
+			}
 			this.reconnect_timer = setTimeout(() => {
 				this.initWebSocket()
 			}, 5000)
@@ -104,7 +112,6 @@ class instance extends instance_skel {
 
 		this.ws.on('error', (data) => {
 			this.log('error', `WebSocket error: ${data}`)
-			this.maybeReconnect()
 		})
 	}
 
