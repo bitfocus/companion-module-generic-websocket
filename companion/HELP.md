@@ -1,10 +1,13 @@
 ## Generic WebSocket
 
 ### Configuration
-* Type in the IP address and port of the device.
+
+- Type in the IP address and port of the device.
 
 ### Available Actions
-* Send Command
+
+- Send Command
 
 ### Available Feedbacks
-* Update Variable
+
+- Update Variable

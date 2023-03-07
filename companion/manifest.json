@@ -1,0 +1,25 @@
+{
+	"id": "generic-websocket",
+	"name": "generic-websocket",
+	"shortname": "websocket",
+	"description": "generic-websocket",
+	"version": "0.0.0",
+	"license": "MIT",
+	"repository": "git+https://github.com/bitfocus/companion-module-generic-websocket.git",
+	"bugs": "https://github.com/bitfocus/companion-module-generic-websocket/issues",
+	"maintainers": [
+		{
+			"name": "Krzysztof Pyrkosz"
+		}
+	],
+	"legacyIds": [],
+	"runtime": {
+		"type": "node18",
+		"api": "nodejs-ipc",
+		"apiVersion": "0.0.0",
+		"entrypoint": "../main.js"
+	},
+	"manufacturer": "Generic",
+	"products": ["WebSocket"],
+	"keywords": ["Protocol", "Generic"]
+}

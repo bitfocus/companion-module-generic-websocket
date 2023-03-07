@@ -1,41 +1,37 @@
-var instance_skel = require('../../instance_skel')
+const { InstanceBase, runEntrypoint, Regex, InstanceStatus } = require('@companion-module/base')
 const WebSocket = require('ws')
-var objectPath = require('object-path')
+const objectPath = require('object-path')
 
-class instance extends instance_skel {
+class WebsocketInstance extends InstanceBase {
 	isInitialized = false
 
-	constructor(system, id, config) {
-		super(system, id, config)
+	subscriptions = new Map()
 
-		this.subscriptions = new Map()
+	async init(config) {
+		this.config = config
 
-		this.actions()
-		this.initFeedbacks()
-		this.subscribeFeedbacks()
-
-		return this
-	}
-
-	init() {
-		this.updateVariables()
 		this.initWebSocket()
 		this.isInitialized = true
+
+		this.updateVariables()
+		this.initActions()
+		this.initFeedbacks()
+		this.subscribeFeedbacks()
 	}
 
-	destroy() {
+	async destroy() {
 		this.isInitialized = false
 		if (this.reconnect_timer) {
 			clearTimeout(this.reconnect_timer)
 			this.reconnect_timer = null
 		}
-		if (this.ws !== undefined) {
+		if (this.ws) {
 			this.ws.close(1000)
 			delete this.ws
 		}
 	}
 
-	updateConfig(config) {
+	async configUpdated(config) {
 		this.config = config
 		this.initWebSocket()
 	}
@@ -45,7 +41,7 @@ class instance extends instance_skel {
 		let defaultValues = {}
 		this.subscriptions.forEach((subscription, subscriptionId) => {
 			if (!subscription.variableName.match(/^[-a-zA-Z0-9_]+$/)) {
-				return;
+				return
 			}
 			variables.add(subscription.variableName)
 			if (callerId === null || callerId === subscriptionId) {
@@ -55,13 +51,13 @@ class instance extends instance_skel {
 		let variableDefinitions = []
 		variables.forEach((variable) => {
 			variableDefinitions.push({
-				label: variable,
 				name: variable,
+				variableId: variable,
 			})
 		})
 		this.setVariableDefinitions(variableDefinitions)
 		if (this.config.reset_variables) {
-			this.setVariables(defaultValues)
+			this.setVariableValues(defaultValues)
 		}
 	}
 
@@ -81,30 +77,32 @@ class instance extends instance_skel {
 			clearTimeout(this.reconnect_timer)
 			this.reconnect_timer = null
 		}
-		var ip = this.config.host
-		var port = this.config.port
-		this.status(this.STATUS_UNKNOWN)
+
+		const ip = this.config.host
+		const port = this.config.port
 		if (!ip || !port) {
-			this.status(this.STATUS_ERROR, `Configuration error - no WebSocket host and/or port defined`)
+			this.updateStatus(InstanceStatus.BadConfig, `no host and/or port defined`)
 			return
 		}
 
-		if (this.ws !== undefined) {
+		this.updateStatus(InstanceStatus.Connecting)
+
+		if (this.ws) {
 			this.ws.close(1000)
 			delete this.ws
 		}
 		this.ws = new WebSocket(`ws://${ip}:${port}`)
 
 		this.ws.on('open', () => {
+			this.updateStatus(InstanceStatus.Ok)
 			this.log('debug', `Connection opened`)
-			this.status(this.STATUS_OK)
 			if (this.config.reset_variables) {
 				this.updateVariables()
 			}
 		})
 		this.ws.on('close', (code) => {
 			this.log('debug', `Connection closed with code ${code}`)
-			this.status(this.STATUS_ERROR, `Connection closed with code ${code}`)
+			this.updateStatus(InstanceStatus.Disconnected, `Connection closed with code ${code}`)
 			this.maybeReconnect()
 		})
 
@@ -119,29 +117,35 @@ class instance extends instance_skel {
 		if (this.config.debug_messages) {
 			this.log('debug', `Message received: ${data}`)
 		}
-		var msgValue = null
+
+		let msgValue = null
 		try {
 			msgValue = JSON.parse(data)
 		} catch (e) {
 			msgValue = data
 		}
+
 		this.subscriptions.forEach((subscription) => {
 			if (subscription.variableName === '') {
 				return
 			}
 			if (subscription.subpath === '') {
-				this.setVariable(subscription.variableName, typeof msgValue === 'object' ? JSON.stringify(msgValue) : msgValue)
+				this.setVariableValues({
+					[subscription.variableName]: typeof msgValue === 'object' ? JSON.stringify(msgValue) : msgValue,
+				})
 			} else if (typeof msgValue === 'object' && objectPath.has(msgValue, subscription.subpath)) {
 				let value = objectPath.get(msgValue, subscription.subpath)
-				this.setVariable(subscription.variableName, typeof value === 'object' ? JSON.stringify(value) : value)
+				this.setVariable({
+					[subscription.variableName]: typeof value === 'object' ? JSON.stringify(value) : value,
+				})
 			}
 		})
 	}
 
-	config_fields() {
+	getConfigFields() {
 		return [
 			{
-				type: 'text',
+				type: 'static-text',
 				id: 'info',
 				width: 12,
 				label: 'Information',
@@ -161,7 +165,7 @@ class instance extends instance_skel {
 				label: 'Port',
 				tooltip: 'The port of the WebSocket server',
 				width: 6,
-				regex: this.REGEX_NUMBER,
+				regex: Regex.NUMBER,
 			},
 			{
 				type: 'checkbox',
@@ -192,7 +196,8 @@ class instance extends instance_skel {
 	initFeedbacks() {
 		this.setFeedbackDefinitions({
 			websocket_variable: {
-				label: 'Update variable with value from WebSocket message',
+				type: 'advanced',
+				name: 'Update variable with value from WebSocket message',
 				description:
 					'Receive messages from the WebSocket and set the value to a variable. Variables can be used on any button.',
 				options: [
@@ -212,6 +217,7 @@ class instance extends instance_skel {
 				],
 				callback: () => {
 					// Nothing to do, as this feeds a variable
+					return {}
 				},
 				subscribe: (feedback) => {
 					this.subscriptions.set(feedback.id, {
@@ -229,29 +235,29 @@ class instance extends instance_skel {
 		})
 	}
 
-	actions(system) {
-		this.setActions({
+	initActions() {
+		this.setActionDefinitions({
 			send_command: {
-				label: 'Send generic command',
+				name: 'Send generic command',
 				options: [
 					{
 						type: 'textinput',
 						label: 'data',
 						id: 'data',
 						default: '',
+						useVariables: true,
 					},
 				],
-				callback: (action) => {
-					this.parseVariables(action.options.data, (value) => {
-						if (this.config.debug_messages) {
-							this.log('debug', `Message sent: ${value}`)
-						}
-						this.ws.send(value + '\r\n')
-					})
+				callback: async (action, context) => {
+					const value = await context.parseVariablesInString(action.options.data)
+					if (this.config.debug_messages) {
+						this.log('debug', `Message sent: ${value}`)
+					}
+					this.ws.send(value + '\r\n')
 				},
 			},
 		})
 	}
 }
 
-exports = module.exports = instance
+runEntrypoint(WebsocketInstance, [])
