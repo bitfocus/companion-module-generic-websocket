@@ -5,24 +5,26 @@ export const upgradeScripts = [
 			updatedActions: [],
 			updatedFeedbacks: [],
 		}
-		let config = props.config
-		if (config.url === undefined) {
-			let host = 'localhost'
-			let port = null
-			if (config.host) {
-				host = config.host
-				delete config.host
+		if (props.config) {
+			let config = props.config
+			if (config.url === undefined) {
+				let host = 'localhost'
+				let port = null
+				if (config.host) {
+					host = config.host
+					delete config.host
+				}
+				if (config.port) {
+					port = config.port
+					delete config.port
+				}
+				config.url = 'ws://' + host + (port ? ':' + port : '')
 			}
-			if (config.port) {
-				port = config.port
-				delete config.port
+			if (config.append_new_line === undefined) {
+				config.append_new_line = true
 			}
-			config.url = 'ws://' + host + (port ? ':' + port : '')
+			result.updatedConfig = config
 		}
-		if (config.append_new_line === undefined) {
-			config.append_new_line = true
-		}
-		result.updatedConfig = config
 		return result
 	},
 ]
