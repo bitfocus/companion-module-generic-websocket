@@ -5,7 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"test": "echo \"Error: no test specified\" && exit 1",
-		"format": "prettier --write ."
+		"format": "prettier -w ."
 	},
 	"license": "MIT",
 	"dependencies": {
@@ -18,7 +18,7 @@
 		"url": "git+https://github.com/bitfocus/companion-module-generic-websocket.git"
 	},
 	"devDependencies": {
-		"@companion-module/tools": "^1.0.2",
-		"prettier": "^2.8.7"
-	}
+		"@companion-module/tools": "^1.0.2"
+	},
+	"prettier": "@companion-module/tools/.prettierrc.json"
 }
