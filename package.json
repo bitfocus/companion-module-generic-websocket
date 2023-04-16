@@ -1,9 +1,11 @@
 {
 	"name": "generic-websocket",
-	"version": "2.0.0",
+	"version": "2.1.0",
 	"main": "main.js",
+	"type": "module",
 	"scripts": {
-		"test": "echo \"Error: no test specified\" && exit 1"
+		"test": "echo \"Error: no test specified\" && exit 1",
+		"format": "prettier --write ."
 	},
 	"license": "MIT",
 	"dependencies": {
@@ -16,6 +18,7 @@
 		"url": "git+https://github.com/bitfocus/companion-module-generic-websocket.git"
 	},
 	"devDependencies": {
-		"@companion-module/tools": "^1.0.2"
+		"@companion-module/tools": "^1.0.2",
+		"prettier": "^2.8.7"
 	}
 }
