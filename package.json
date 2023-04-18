@@ -1,9 +1,11 @@
 {
 	"name": "generic-websocket",
-	"version": "2.0.0",
+	"version": "2.1.0",
 	"main": "main.js",
+	"type": "module",
 	"scripts": {
-		"test": "echo \"Error: no test specified\" && exit 1"
+		"test": "echo \"Error: no test specified\" && exit 1",
+		"format": "prettier -w ."
 	},
 	"license": "MIT",
 	"dependencies": {
@@ -17,5 +19,6 @@
 	},
 	"devDependencies": {
 		"@companion-module/tools": "^1.0.2"
-	}
+	},
+	"prettier": "@companion-module/tools/.prettierrc.json"
 }

@@ -1,11 +1,13 @@
-const { InstanceBase, runEntrypoint, Regex, InstanceStatus } = require('@companion-module/base')
-const WebSocket = require('ws')
-const objectPath = require('object-path')
+import { InstanceBase, runEntrypoint, InstanceStatus } from '@companion-module/base'
+import WebSocket from 'ws'
+import objectPath from 'object-path'
+import { upgradeScripts } from './upgrade.js'
 
 class WebsocketInstance extends InstanceBase {
 	isInitialized = false
 
 	subscriptions = new Map()
+	wsRegex = '^wss?:\\/\\/([\\da-z\\.-]+)(:\\d{1,5})?(?:\\/(.*))?$'
 
 	async init(config) {
 		this.config = config
@@ -78,10 +80,9 @@ class WebsocketInstance extends InstanceBase {
 			this.reconnect_timer = null
 		}
 
-		const ip = this.config.host
-		const port = this.config.port
-		if (!ip || !port) {
-			this.updateStatus(InstanceStatus.BadConfig, `no host and/or port defined`)
+		const url = this.config.url
+		if (!url || url.match(new RegExp(this.wsRegex)) === null) {
+			this.updateStatus(InstanceStatus.BadConfig, `WS URL is not defined or invalid`)
 			return
 		}
 
@@ -91,7 +92,7 @@ class WebsocketInstance extends InstanceBase {
 			this.ws.close(1000)
 			delete this.ws
 		}
-		this.ws = new WebSocket(`ws://${ip}:${port}`)
+		this.ws = new WebSocket(url)
 
 		this.ws.on('open', () => {
 			this.updateStatus(InstanceStatus.Ok)
@@ -135,7 +136,7 @@ class WebsocketInstance extends InstanceBase {
 				})
 			} else if (typeof msgValue === 'object' && objectPath.has(msgValue, subscription.subpath)) {
 				let value = objectPath.get(msgValue, subscription.subpath)
-				this.setVariable({
+				this.setVariableValues({
 					[subscription.variableName]: typeof value === 'object' ? JSON.stringify(value) : value,
 				})
 			}
@@ -154,24 +155,25 @@ class WebsocketInstance extends InstanceBase {
 			},
 			{
 				type: 'textinput',
-				id: 'host',
-				label: 'Target host',
-				tooltip: 'The host of the WebSocket server',
-				width: 6,
-			},
-			{
-				type: 'textinput',
-				id: 'port',
-				label: 'Port',
-				tooltip: 'The port of the WebSocket server',
-				width: 6,
-				regex: Regex.NUMBER,
+				id: 'url',
+				label: 'Target URL',
+				tooltip: 'The URL of the WebSocket server (ws[s]://domain[:port][/path])',
+				width: 12,
+				regex: '/' + this.wsRegex + '/',
 			},
 			{
 				type: 'checkbox',
 				id: 'reconnect',
 				label: 'Reconnect',
 				tooltip: 'Reconnect on WebSocket error (after 5 secs)',
+				width: 6,
+				default: true,
+			},
+			{
+				type: 'checkbox',
+				id: 'append_new_line',
+				label: 'Append new line',
+				tooltip: 'Append new line (\\r\\n) to commands',
 				width: 6,
 				default: true,
 			},
@@ -253,11 +255,11 @@ class WebsocketInstance extends InstanceBase {
 					if (this.config.debug_messages) {
 						this.log('debug', `Message sent: ${value}`)
 					}
-					this.ws.send(value + '\r\n')
+					this.ws.send(value + (this.config.append_new_line ? '\r\n' : ''))
 				},
 			},
 		})
 	}
 }
 
-runEntrypoint(WebsocketInstance, [])
+runEntrypoint(WebsocketInstance, upgradeScripts)
