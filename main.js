@@ -92,7 +92,7 @@ class WebsocketInstance extends InstanceBase {
 			this.ws.close(1000)
 			delete this.ws
 		}
-		this.ws = new WebSocket(url)
+		this.ws = new WebSocket(url, this.config.protocol)
 
 		this.ws.on('open', () => {
 			this.updateStatus(InstanceStatus.Ok)
@@ -160,6 +160,14 @@ class WebsocketInstance extends InstanceBase {
 				tooltip: 'The URL of the WebSocket server (ws[s]://domain[:port][/path])',
 				width: 12,
 				regex: '/' + this.wsRegex + '/',
+			},
+			{
+				type: 'textinput',
+				id: 'protocol',
+				label: 'Protocol',
+				tooltip: 'The protocol of the WebSocket server',
+				width: 12,
+				regex: '/.*/',
 			},
 			{
 				type: 'checkbox',
