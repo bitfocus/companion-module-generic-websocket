@@ -10,6 +10,10 @@
 	"maintainers": [
 		{
 			"name": "Krzysztof Pyrkosz"
+		},
+		{
+			"name": "Dorian Meid",
+			"email": "dnmeid@gmx.net"
 		}
 	],
 	"legacyIds": [],
@@ -20,6 +24,11 @@
 		"entrypoint": "../main.js"
 	},
 	"manufacturer": "Generic",
-	"products": ["WebSocket"],
-	"keywords": ["Protocol", "Generic"]
+	"products": [
+		"WebSocket"
+	],
+	"keywords": [
+		"Protocol",
+		"Generic"
+	]
 }

@@ -2,6 +2,7 @@ import { InstanceBase, runEntrypoint, InstanceStatus } from '@companion-module/b
 import WebSocket from 'ws'
 import objectPath from 'object-path'
 import { upgradeScripts } from './upgrade.js'
+import { rejects } from 'assert'
 
 class WebsocketInstance extends InstanceBase {
 	isInitialized = false
@@ -11,6 +12,8 @@ class WebsocketInstance extends InstanceBase {
 
 	async init(config) {
 		this.config = config
+		if (!this.config.fbprefix) this.config.fbprefix = ''
+		if (!this.config.fbsuffix) this.config.fbsuffix = ''
 
 		this.initWebSocket()
 		this.isInitialized = true
@@ -34,8 +37,13 @@ class WebsocketInstance extends InstanceBase {
 	}
 
 	async configUpdated(config) {
+		const oldconfig = {...this.config}
+
 		this.config = config
-		this.initWebSocket()
+		if (!this.config.fbprefix) this.config.fbprefix = ''
+		if (!this.config.fbsuffix) this.config.fbsuffix = ''
+
+		if (oldconfig['url'] !== config['url']) this.initWebSocket()
 	}
 
 	updateVariables(callerId = null) {
@@ -50,7 +58,7 @@ class WebsocketInstance extends InstanceBase {
 				defaultValues[subscription.variableName] = ''
 			}
 		})
-		let variableDefinitions = []
+		let variableDefinitions = [{name: 'Timestamp when last data was received', variableId: 'lastDataReceived'}]
 		variables.forEach((variable) => {
 			variableDefinitions.push({
 				name: variable,
@@ -120,13 +128,22 @@ class WebsocketInstance extends InstanceBase {
 		}
 
 		let msgValue = null
-		try {
-			msgValue = JSON.parse(data)
-		} catch (e) {
+		if (Buffer.isBuffer(data)) {
+			data = data.toString()
+		}
+
+		if (typeof data === 'object') {
 			msgValue = data
+		} else {
+			try {
+				msgValue = JSON.parse(data)
+			} catch (e) {
+				msgValue = data
+			}
 		}
 
 		this.subscriptions.forEach((subscription) => {
+			const path = `${this.config.fbprefix}${subscription.subpath}${this.config.fbsuffix}`
 			if (subscription.variableName === '') {
 				return
 			}
@@ -134,13 +151,14 @@ class WebsocketInstance extends InstanceBase {
 				this.setVariableValues({
 					[subscription.variableName]: typeof msgValue === 'object' ? JSON.stringify(msgValue) : msgValue,
 				})
-			} else if (typeof msgValue === 'object' && objectPath.has(msgValue, subscription.subpath)) {
-				let value = objectPath.get(msgValue, subscription.subpath)
+			} else if (typeof msgValue === 'object' && objectPath.has(msgValue, path)) {
+				let value = objectPath.get(msgValue, path)
 				this.setVariableValues({
 					[subscription.variableName]: typeof value === 'object' ? JSON.stringify(value) : value,
 				})
 			}
 		})
+		this.setVariableValues({lastDataReceived: Date.now()})
 	}
 
 	getConfigFields() {
@@ -170,12 +188,18 @@ class WebsocketInstance extends InstanceBase {
 				default: true,
 			},
 			{
-				type: 'checkbox',
+				type: 'dropdown',
 				id: 'append_new_line',
-				label: 'Append new line',
-				tooltip: 'Append new line (\\r\\n) to commands',
+				label: 'Append termination character',
+				choices: [
+					{id: '',   label: 'None'},
+					{id: 'rn', label: 'Return+Newline'},
+					{id: 'nr', label: 'Newline+Return'},
+					{id: 'r',  label: 'Return'},
+					{id: 'n',  label: 'Newline'},
+				],
 				width: 6,
-				default: true,
+				default: 'rn',
 			},
 			{
 				type: 'checkbox',
@@ -191,6 +215,24 @@ class WebsocketInstance extends InstanceBase {
 				tooltip: 'Reset variables on init and on connect',
 				width: 6,
 				default: true,
+			},
+			{
+				type: 'textinput',
+				id: 'fbprefix',
+				label: 'Feedback Prefix',
+				tooltip: 'This prefix will be added to all feedbacks "Update variable with value from WebSocket message" in front of the JSON path option.',
+				default: '',
+				width: 6,
+				regex: '/^[\\w\\.\\-_+\\/\\\\\\$ ]*$/',
+			},
+			{
+				type: 'textinput',
+				id: 'fbsuffix',
+				label: 'Feedback Suffix',
+				tooltip: 'This suffix will be added to all feedbacks "Update variable with value from WebSocket message" after the JSON path option.',
+				default: '',
+				width: 6,
+				regex: '/^[\\w\\.\\-_+\\/\\\\\\$ ]*$/',
 			},
 		]
 	}
@@ -223,8 +265,8 @@ class WebsocketInstance extends InstanceBase {
 				},
 				subscribe: (feedback) => {
 					this.subscriptions.set(feedback.id, {
-						variableName: feedback.options.variable,
-						subpath: feedback.options.subpath,
+						variableName: `${feedback.options.variable}`,
+						subpath: `${feedback.options.subpath}`,
 					})
 					if (this.isInitialized) {
 						this.updateVariables(feedback.id)
@@ -252,10 +294,53 @@ class WebsocketInstance extends InstanceBase {
 				],
 				callback: async (action, context) => {
 					const value = await context.parseVariablesInString(action.options.data)
-					if (this.config.debug_messages) {
-						this.log('debug', `Message sent: ${value}`)
+					let termination = ''
+					switch (this.config.append_new_line) {
+						case true:
+							termination = '\r\n'
+							break;
+
+						case 'rn':
+							termination = '\r\n'
+							break;
+
+						case 'nr':
+							termination = '\n\r'
+							break;
+
+						case 'n':
+							termination = '\n'
+							break;
+
+						case 'r':
+							termination = '\r'
+							break;
+					
+						default:
+							termination = ''
+							break;
 					}
-					this.ws.send(value + (this.config.append_new_line ? '\r\n' : ''))
+
+					if (this.config.debug_messages) {
+						this.log('debug', `Sending message: ${value}`)
+					}
+
+					return new Promise((resolve, reject) => {
+						this.ws.send(`${value}${termination}`, (err) => {
+							if (err) {
+								if (this.config.debug_messages) {
+									this.log('error', `Sending message failed.`)
+								}
+								reject(err);
+							} else {
+								if (this.config.debug_messages) {
+									this.log('debug', `Message sent successfully.`)
+								}
+								resolve();
+							}
+						})
+					})
+
 				},
 			},
 		})

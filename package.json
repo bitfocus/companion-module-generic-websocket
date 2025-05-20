@@ -1,6 +1,6 @@
 {
 	"name": "generic-websocket",
-	"version": "2.1.0",
+	"version": "2.2.0",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
@@ -9,16 +9,16 @@
 	},
 	"license": "MIT",
 	"dependencies": {
-		"@companion-module/base": "~1.2.1",
+		"@companion-module/base": "~1.12.0",
 		"object-path": "^0.11.8",
-		"ws": "^7.5.10"
+		"ws": "^8.18.2"
 	},
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/bitfocus/companion-module-generic-websocket.git"
 	},
 	"devDependencies": {
-		"@companion-module/tools": "^1.0.2"
+		"@companion-module/tools": "^2.3.0"
 	},
 	"prettier": "@companion-module/tools/.prettierrc.json"
 }
