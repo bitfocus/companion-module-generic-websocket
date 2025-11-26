@@ -14,6 +14,8 @@ class WebsocketInstance extends InstanceBase {
 		this.config = config
 		if (!this.config.fbprefix) this.config.fbprefix = ''
 		if (!this.config.fbsuffix) this.config.fbsuffix = ''
+		if (!this.config.timeout) this.config.timeout = '30'
+		this.heartbeatTimeout = parseInt(this.config.timeout) * 1000
 
 		this.initWebSocket()
 		this.isInitialized = true
@@ -82,6 +84,19 @@ class WebsocketInstance extends InstanceBase {
 		}
 	}
 
+	heartbeat() {
+		if (this.isInitialized && this.config.heartbeat) {
+			if (this.config.debug_messages) {
+				this.log('debug', 'Heartbeat received')
+			}
+			clearTimeout(this.pingTimeout)
+			this.pingTimeout = setTimeout(() => {
+				this.log('debug', 'Connection timed out')
+				this.ws.terminate()
+			}, this.heartbeatTimeout)
+		}
+	}
+
 	initWebSocket() {
 		if (this.reconnect_timer) {
 			clearTimeout(this.reconnect_timer)
@@ -109,7 +124,9 @@ class WebsocketInstance extends InstanceBase {
 				this.updateVariables()
 			}
 		})
+		this.ws.on('ping', () => {this.heartbeat()})
 		this.ws.on('close', (code) => {
+			clearTimeout(this.pingTimeout)
 			this.log('debug', `Connection closed with code ${code}`)
 			this.updateStatus(InstanceStatus.Disconnected, `Connection closed with code ${code}`)
 			this.maybeReconnect()
@@ -200,6 +217,23 @@ class WebsocketInstance extends InstanceBase {
 				],
 				width: 6,
 				default: 'rn',
+			},
+			{
+				type: 'checkbox',
+				id: 'heartbeat',
+				label: 'Listen for heartbeat',
+				tooltip: 'Listen for WebSocket Ping and close the connection if none is received within the specified timeout',
+				width: 6,
+				default: false,
+			},
+			{
+				type: 'textinput',
+				id: 'timeout',
+				label: 'Heartbeat timeout',
+				tooltip: 'Close the connection if no WebSocket Ping is received within this many seconds (default 30)',
+				default: '30',
+				width: 6,
+				regex: '/^$|^[1-9][0-9]*$/',
 			},
 			{
 				type: 'checkbox',
