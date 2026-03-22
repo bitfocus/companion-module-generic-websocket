@@ -4,6 +4,12 @@ See HELP.md and LICENSE
 
 # Version History
 
+### v2.3.0 (2026-03-22)
+* Feature: add User Agent simulation (Chrome, Firefox, Safari, Custom)
+* Feature: add configurable hex ping to keep connection alive
+* Feature: add Send Hex action for binary protocol devices
+* Bugfix: fix ping timer not stopping when disabled in config
+
 ### v2.2.0 (2025-05-20)
 * Feature: add option to add prefix and suffix to feedback JSON path
 * Feature: extend termination characters to various common options

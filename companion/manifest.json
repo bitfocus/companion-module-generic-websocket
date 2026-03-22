@@ -1,34 +1,42 @@
 {
-	"id": "generic-websocket",
-	"name": "generic-websocket",
-	"shortname": "websocket",
-	"description": "generic-websocket",
-	"version": "0.0.0",
-	"license": "MIT",
-	"repository": "git+https://github.com/bitfocus/companion-module-generic-websocket.git",
-	"bugs": "https://github.com/bitfocus/companion-module-generic-websocket/issues",
-	"maintainers": [
-		{
-			"name": "Krzysztof Pyrkosz"
-		},
-		{
-			"name": "Dorian Meid",
-			"email": "meid@backstage.org"
-		}
-	],
-	"legacyIds": [],
-	"runtime": {
-		"type": "node18",
-		"api": "nodejs-ipc",
-		"apiVersion": "0.0.0",
-		"entrypoint": "../main.js"
-	},
-	"manufacturer": "Generic",
-	"products": [
-		"WebSocket"
-	],
-	"keywords": [
-		"Protocol",
-		"Generic"
-	]
+    "$schema": "../node_modules/@companion-module/base/assets/manifest.schema.json",
+    "id": "generic-websocket",
+    "name": "Generic WebSocket",
+    "shortname": "WebSocket",
+    "description": "Control any device using WebSocket protocol. Supports text, JSON and binary hex commands.",
+    "version": "2.3.0",
+    "license": "MIT",
+    "repository": "git+https://github.com/bitfocus/companion-module-generic-websocket.git",
+    "bugs": "https://github.com/bitfocus/companion-module-generic-websocket/issues",
+    "maintainers": [
+        {
+            "name": "Krzysztof Pyrkosz"
+        },
+        {
+            "name": "Dorian Meid",
+            "email": "meid@backstage.org"
+        },
+        {
+            "name": "Luiz Stormorwski dos Santos",
+            "email": "luiz.st.santos@gmail.com"
+        }
+    ],
+    "legacyIds": [],
+    "runtime": {
+        "type": "node22",
+        "api": "nodejs-ipc",
+        "apiVersion": "0.0.0",
+        "entrypoint": "../main.js"
+    },
+    "manufacturer": "Generic",
+    "products": [
+        "WebSocket"
+    ],
+    "keywords": [
+        "Protocol",
+        "Generic",
+        "WebSocket",
+        "Hex",
+        "Binary"
+    ]
 }
