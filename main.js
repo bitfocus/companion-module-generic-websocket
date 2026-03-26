@@ -2,7 +2,6 @@ import { InstanceBase, runEntrypoint, InstanceStatus } from '@companion-module/b
 import WebSocket from 'ws'
 import objectPath from 'object-path'
 import { upgradeScripts } from './upgrade.js'
-import { rejects } from 'assert'
 
 class WebsocketInstance extends InstanceBase {
 	isInitialized = false
@@ -30,6 +29,10 @@ class WebsocketInstance extends InstanceBase {
 			clearTimeout(this.reconnect_timer)
 			this.reconnect_timer = null
 		}
+		if (this.ping_timer) {
+			clearInterval(this.ping_timer)
+			this.ping_timer = null
+		}
 		if (this.ws) {
 			this.ws.close(1000)
 			delete this.ws
@@ -37,13 +40,39 @@ class WebsocketInstance extends InstanceBase {
 	}
 
 	async configUpdated(config) {
-		const oldconfig = {...this.config}
+    const oldconfig = { ...this.config }
 
-		this.config = config
-		if (!this.config.fbprefix) this.config.fbprefix = ''
-		if (!this.config.fbsuffix) this.config.fbsuffix = ''
+    this.config = config
+    if (!this.config.fbprefix) this.config.fbprefix = ''
+    if (!this.config.fbsuffix) this.config.fbsuffix = ''
 
-		if (oldconfig['url'] !== config['url']) this.initWebSocket()
+    if (
+        oldconfig['ping_enabled'] !== config['ping_enabled'] ||
+        oldconfig['ping_interval'] !== config['ping_interval'] ||
+        oldconfig['ping_hex'] !== config['ping_hex']
+    ) {
+        if (this.ping_timer) {
+            clearInterval(this.ping_timer)
+            this.ping_timer = null
+        }
+
+        if (this.config.ping_enabled && this.ws?.readyState === WebSocket.OPEN) {
+            this.ping_timer = setInterval(() => {
+                if (this.ws?.readyState === WebSocket.OPEN) {
+                    this.ws.send(this.hexToBuffer(this.config.ping_hex || '00'))
+                    if (this.config.debug_messages) {
+                        this.log('debug', `Ping sent: ${this.config.ping_hex || '00'}`)
+                    }
+                }
+            }, this.config.ping_interval || 3000)
+        }
+    }
+
+    if (oldconfig['url'] !== config['url']) this.initWebSocket()
+	}
+
+	hexToBuffer(hexString) {
+		return Buffer.from(hexString.replace(/[^0-9a-fA-F]/g, ''), 'hex')
 	}
 
 	updateVariables(callerId = null) {
@@ -58,7 +87,7 @@ class WebsocketInstance extends InstanceBase {
 				defaultValues[subscription.variableName] = ''
 			}
 		})
-		let variableDefinitions = [{name: 'Timestamp when last data was received', variableId: 'lastDataReceived'}]
+		let variableDefinitions = [{ name: 'Timestamp when last data was received', variableId: 'lastDataReceived' }]
 		variables.forEach((variable) => {
 			variableDefinitions.push({
 				name: variable,
@@ -87,6 +116,10 @@ class WebsocketInstance extends InstanceBase {
 			clearTimeout(this.reconnect_timer)
 			this.reconnect_timer = null
 		}
+		if (this.ping_timer) {
+			clearInterval(this.ping_timer)
+			this.ping_timer = null
+		}
 
 		const url = this.config.url
 		if (!url || url.match(new RegExp(this.wsRegex)) === null) {
@@ -100,7 +133,26 @@ class WebsocketInstance extends InstanceBase {
 			this.ws.close(1000)
 			delete this.ws
 		}
-		this.ws = new WebSocket(url)
+
+		// User Agent
+		const userAgents = {
+			chrome: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+			firefox: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0',
+			safari: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15',
+			custom: this.config.user_agent_custom || '',
+		}
+
+		const selectedUA = userAgents[this.config.user_agent]
+		const wsOptions = selectedUA
+			? {
+					headers: {
+						Origin: `http://${new URL(url).hostname}`,
+						'User-Agent': selectedUA,
+					},
+				}
+			: {}
+
+		this.ws = new WebSocket(url, wsOptions)
 
 		this.ws.on('open', () => {
 			this.updateStatus(InstanceStatus.Ok)
@@ -108,10 +160,26 @@ class WebsocketInstance extends InstanceBase {
 			if (this.config.reset_variables) {
 				this.updateVariables()
 			}
+
+			if (this.config.ping_enabled) {
+				this.ping_timer = setInterval(() => {
+					if (this.ws?.readyState === WebSocket.OPEN) {
+						this.ws.send(this.hexToBuffer(this.config.ping_hex || '00'))
+						if (this.config.debug_messages) {
+							this.log('debug', `Ping sent: ${this.config.ping_hex || '00'}`)
+						}
+					}
+				}, this.config.ping_interval || 3000)
+			}
 		})
+
 		this.ws.on('close', (code) => {
 			this.log('debug', `Connection closed with code ${code}`)
 			this.updateStatus(InstanceStatus.Disconnected, `Connection closed with code ${code}`)
+			if (this.ping_timer) {
+				clearInterval(this.ping_timer)
+				this.ping_timer = null
+			}
 			this.maybeReconnect()
 		})
 
@@ -158,7 +226,7 @@ class WebsocketInstance extends InstanceBase {
 				})
 			}
 		})
-		this.setVariableValues({lastDataReceived: Date.now()})
+		this.setVariableValues({ lastDataReceived: Date.now() })
 	}
 
 	getConfigFields() {
@@ -168,8 +236,7 @@ class WebsocketInstance extends InstanceBase {
 				id: 'info',
 				width: 12,
 				label: 'Information',
-				value:
-					"<strong>PLEASE READ THIS!</strong> Generic modules is only for use with custom applications. If you use this module to control a device or software on the market that more than you are using, <strong>PLEASE let us know</strong> about this software, so we can make a proper module for it. If we already support this and you use this to trigger a feature our module doesn't support, please let us know. We want companion to be as easy as possible to use for anyone.",
+				value: '<strong>PLEASE READ THIS!</strong> Generic modules is only for use with custom applications. If you use this module to control a device or software on the market that more than you are using, <strong>PLEASE let us know</strong> about this software, so we can make a proper module for it. If we already support this and you use this to trigger a feature our module doesn\'t support, please let us know. We want companion to be as easy as possible to use for anyone.',
 			},
 			{
 				type: 'textinput',
@@ -192,11 +259,11 @@ class WebsocketInstance extends InstanceBase {
 				id: 'append_new_line',
 				label: 'Append termination character',
 				choices: [
-					{id: '',   label: 'None'},
-					{id: 'rn', label: 'Return+Newline'},
-					{id: 'nr', label: 'Newline+Return'},
-					{id: 'r',  label: 'Return'},
-					{id: 'n',  label: 'Newline'},
+					{ id: '', label: 'None' },
+					{ id: 'rn', label: 'Return+Newline' },
+					{ id: 'nr', label: 'Newline+Return' },
+					{ id: 'r', label: 'Return' },
+					{ id: 'n', label: 'Newline' },
 				],
 				width: 6,
 				default: 'rn',
@@ -234,6 +301,60 @@ class WebsocketInstance extends InstanceBase {
 				width: 6,
 				regex: '/^[\\w\\.\\-_+\\/\\\\\\$ ]*$/',
 			},
+			// ── User Agent ──────────────────────────────────────────────
+			{
+				type: 'dropdown',
+				id: 'user_agent',
+				label: 'User Agent',
+				tooltip: 'Simulate a browser to bypass device restrictions',
+				width: 6,
+				default: 'none',
+				choices: [
+					{ id: 'none', label: 'None' },
+					{ id: 'chrome', label: 'Chrome' },
+					{ id: 'firefox', label: 'Firefox' },
+					{ id: 'safari', label: 'Safari' },
+					{ id: 'custom', label: 'Custom' },
+				],
+			},
+			{
+				type: 'textinput',
+				id: 'user_agent_custom',
+				label: 'Custom User Agent',
+				tooltip: 'Enter a custom User-Agent string',
+				width: 6,
+				default: '',
+				isVisible: (config) => config.user_agent === 'custom',
+			},
+			// ── Ping ────────────────────────────────────────────────────
+			{
+				type: 'checkbox',
+				id: 'ping_enabled',
+				label: 'Enable Ping',
+				tooltip: 'Send a periodic hex ping to keep the connection alive',
+				width: 4,
+				default: false,
+			},
+			{
+				type: 'number',
+				id: 'ping_interval',
+				label: 'Ping Interval (ms)',
+				tooltip: 'How often to send the ping in milliseconds',
+				width: 4,
+				default: 3000,
+				min: 500,
+				max: 30000,
+				isVisible: (config) => config.ping_enabled,
+			},
+			{
+				type: 'textinput',
+				id: 'ping_hex',
+				label: 'Ping Hex (ex: 00)',
+				tooltip: 'Hex bytes to send as keepalive ping',
+				width: 4,
+				default: '00',
+				isVisible: (config) => config.ping_enabled,
+			},
 		]
 	}
 
@@ -242,8 +363,7 @@ class WebsocketInstance extends InstanceBase {
 			websocket_variable: {
 				type: 'advanced',
 				name: 'Update variable with value from WebSocket message',
-				description:
-					'Receive messages from the WebSocket and set the value to a variable. Variables can be used on any button.',
+				description: 'Receive messages from the WebSocket and set the value to a variable. Variables can be used on any button.',
 				options: [
 					{
 						type: 'textinput',
@@ -260,7 +380,6 @@ class WebsocketInstance extends InstanceBase {
 					},
 				],
 				callback: () => {
-					// Nothing to do, as this feeds a variable
 					return {}
 				},
 				subscribe: (feedback) => {
@@ -298,27 +417,22 @@ class WebsocketInstance extends InstanceBase {
 					switch (this.config.append_new_line) {
 						case true:
 							termination = '\r\n'
-							break;
-
+							break
 						case 'rn':
 							termination = '\r\n'
-							break;
-
+							break
 						case 'nr':
 							termination = '\n\r'
-							break;
-
+							break
 						case 'n':
 							termination = '\n'
-							break;
-
+							break
 						case 'r':
 							termination = '\r'
-							break;
-					
+							break
 						default:
 							termination = ''
-							break;
+							break
 					}
 
 					if (this.config.debug_messages) {
@@ -331,16 +445,60 @@ class WebsocketInstance extends InstanceBase {
 								if (this.config.debug_messages) {
 									this.log('error', `Sending message failed.`)
 								}
-								reject(err);
+								reject(err)
 							} else {
 								if (this.config.debug_messages) {
 									this.log('debug', `Message sent successfully.`)
 								}
-								resolve();
+								resolve()
 							}
 						})
 					})
+				},
+			},
 
+			send_hex: {
+				name: 'Send hex command',
+				options: [
+					{
+						type: 'textinput',
+						label: 'Hex (ex: hex:800703...)',
+						id: 'data',
+						default: 'hex:',
+						tooltip: 'Prefix with hex: to send binary data. Example: hex:800703000000000000',
+						useVariables: true,
+					},
+				],
+				callback: async (action, context) => {
+					const value = await context.parseVariablesInString(action.options.data)
+
+					if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+						this.log('error', `Cannot send hex: WebSocket is not connected.`)
+						return
+					}
+
+					const isHex = value.startsWith('hex:')
+					const payload = isHex ? this.hexToBuffer(value.substring(4)) : Buffer.from(value)
+
+					if (this.config.debug_messages) {
+						this.log('debug', `Sending hex: ${value}`)
+					}
+
+					return new Promise((resolve, reject) => {
+						this.ws.send(payload, (err) => {
+							if (err) {
+								if (this.config.debug_messages) {
+									this.log('error', `Sending hex failed: ${err.message}`)
+								}
+								reject(err)
+							} else {
+								if (this.config.debug_messages) {
+									this.log('debug', `Hex sent successfully.`)
+								}
+								resolve()
+							}
+						})
+					})
 				},
 			},
 		})

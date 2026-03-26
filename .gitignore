@@ -2,3 +2,5 @@ node_modules/
 /pkg
 /pkg.tgz
 /DEBUG-*
+simulator.js
+generic-websocket-2.3.0.tgz
