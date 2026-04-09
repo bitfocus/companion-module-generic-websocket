@@ -20,7 +20,7 @@
 	},
 	"devDependencies": {
 		"@companion-module/tools": "^2.6.1",
-		"prettier": "^3.0.0"
+		"prettier": "^3.7.4"
 	},
 	"prettier": "@companion-module/tools/.prettierrc.json",
 	"packageManager": "yarn@4.12.0",
