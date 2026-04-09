@@ -35,7 +35,7 @@ export const upgradeScripts = [
 		}
 		if (props.config) {
 			let config = props.config
-			if (config.append_new_line === '' | config.append_new_line === 'rn' | config.append_new_line === 'nr' | config.append_new_line === 'r' | config.append_new_line === 'n') {
+			if (config.append_new_line === '' || config.append_new_line === 'rn' || config.append_new_line === 'nr' || config.append_new_line === 'r' || config.append_new_line === 'n') {
 				return result // no update needed
 			}
 			if (config.append_new_line === true) {
