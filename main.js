@@ -435,6 +435,11 @@ class WebsocketInstance extends InstanceBase {
 							break
 					}
 
+					if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+						this.log('error', `Cannot send command: WebSocket is not connected.`)
+						return
+					}
+
 					if (this.config.debug_messages) {
 						this.log('debug', `Sending message: ${value}`)
 					}

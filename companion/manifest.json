@@ -4,7 +4,7 @@
     "name": "Generic WebSocket",
     "shortname": "WebSocket",
     "description": "Control any device using WebSocket protocol. Supports text, JSON and binary hex commands.",
-    "version": "2.3.0",
+    "version": "0.0.0",
     "license": "MIT",
     "repository": "git+https://github.com/bitfocus/companion-module-generic-websocket.git",
     "bugs": "https://github.com/bitfocus/companion-module-generic-websocket/issues",

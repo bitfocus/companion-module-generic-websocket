@@ -1,6 +1,7 @@
 node_modules/
 /pkg
-/pkg.tgz
-/DEBUG-*
+/*.tgz
+DEBUG-*
 simulator.js
-generic-websocket-2.3.0.tgz
+package-lock.json
+/.yarn
