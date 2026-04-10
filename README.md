@@ -4,6 +4,14 @@ See HELP.md and LICENSE
 
 # Version History
 
+### v2.3.1 (2026-04-09)
+* Bugfix: Add error handling to WebSocket ping logic to prevent process crashes [H1]
+* Bugfix: Fix Origin header protocol mismatch (use HTTPS for WSS connections) [H2]
+* Bugfix: Fix bitwise logic error in upgrade script [C2]
+* Bugfix: add WebSocket state check before sending to prevent crashes [C1]
+* Maintenance: Add .gitattributes for consistent line endings [C4]
+* Maintenance: Add Prettier for code formatting and enforce Node 22+ requirements [C5, M4]
+
 ### v2.3.0 (2026-03-22)
 * Feature: add User Agent simulation (Chrome, Firefox, Safari, Custom)
 * Feature: add configurable hex ping to keep connection alive
