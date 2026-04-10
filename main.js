@@ -4,191 +4,189 @@ import objectPath from 'object-path'
 import { upgradeScripts } from './upgrade.js'
 
 class WebsocketInstance extends InstanceBase {
-	isInitialized = false
+    isInitialized = false
+    subscriptions = new Map()
+    wsRegex = '^wss?:\\/\\/([\\da-z\\.-]+)(:\\d{1,5})?(?:\\/(.*))?$'
 
-	subscriptions = new Map()
-	wsRegex = '^wss?:\\/\\/([\\da-z\\.-]+)(:\\d{1,5})?(?:\\/(.*))?$'
+    async init(config) {
+        this.config = config
+        if (!this.config.fbprefix) this.config.fbprefix = ''
+        if (!this.config.fbsuffix) this.config.fbsuffix = ''
 
-	async init(config) {
-		this.config = config
-		if (!this.config.fbprefix) this.config.fbprefix = ''
-		if (!this.config.fbsuffix) this.config.fbsuffix = ''
+        this.initWebSocket()
+        this.isInitialized = true
 
-		this.initWebSocket()
-		this.isInitialized = true
+        this.updateVariables()
+        this.initActions()
+        this.initFeedbacks()
+        this.subscribeFeedbacks()
+    }
 
-		this.updateVariables()
-		this.initActions()
-		this.initFeedbacks()
-		this.subscribeFeedbacks()
-	}
+    async destroy() {
+        this.isInitialized = false
+        if (this.reconnect_timer) {
+            clearTimeout(this.reconnect_timer)
+            this.reconnect_timer = null
+        }
+        if (this.ping_timer) {
+            clearInterval(this.ping_timer)
+            this.ping_timer = null
+        }
+        if (this.ws) {
+            this.ws.close(1000)
+            delete this.ws
+        }
+    }
 
-	async destroy() {
-		this.isInitialized = false
-		if (this.reconnect_timer) {
-			clearTimeout(this.reconnect_timer)
-			this.reconnect_timer = null
-		}
-		if (this.ping_timer) {
-			clearInterval(this.ping_timer)
-			this.ping_timer = null
-		}
-		if (this.ws) {
-			this.ws.close(1000)
-			delete this.ws
-		}
-	}
+    async configUpdated(config) {
+        const oldconfig = { ...this.config }
+        this.config = config
+        
+        if (!this.config.fbprefix) this.config.fbprefix = ''
+        if (!this.config.fbsuffix) this.config.fbsuffix = ''
 
-	async configUpdated(config) {
-    const oldconfig = { ...this.config }
+        if (
+            oldconfig['ping_enabled'] !== config['ping_enabled'] ||
+            oldconfig['ping_interval'] !== config['ping_interval'] ||
+            oldconfig['ping_hex'] !== config['ping_hex']
+        ) {
+            if (this.ping_timer) {
+                clearInterval(this.ping_timer)
+                this.ping_timer = null
+            }
 
-    this.config = config
-    if (!this.config.fbprefix) this.config.fbprefix = ''
-    if (!this.config.fbsuffix) this.config.fbsuffix = ''
+            if (this.config.ping_enabled && this.ws?.readyState === WebSocket.OPEN) {
+                this.ping_timer = setInterval(() => {
+                    if (this.ws?.readyState === WebSocket.OPEN) {
+                        this.ws.send(this.hexToBuffer(this.config.ping_hex || '00'), (err) => {
+                            if (err) this.log('error', `Ping send failed: ${err.message}`)
+                        })
+                        if (this.config.debug_messages) {
+                            this.log('debug', `Ping sent: ${this.config.ping_hex || '00'}`)
+                        }
+                    }
+                }, this.config.ping_interval || 3000)
+            }
+        }
 
-    if (
-        oldconfig['ping_enabled'] !== config['ping_enabled'] ||
-        oldconfig['ping_interval'] !== config['ping_interval'] ||
-        oldconfig['ping_hex'] !== config['ping_hex']
-    ) {
+        if (oldconfig['url'] !== config['url']) this.initWebSocket()
+    }
+
+    hexToBuffer(hexString) {
+        return Buffer.from(hexString.replace(/[^0-9a-fA-F]/g, ''), 'hex')
+    }
+
+    updateVariables(callerId = null) {
+        let variables = new Set()
+        let defaultValues = {}
+        this.subscriptions.forEach((subscription, subscriptionId) => {
+            if (!subscription.variableName.match(/^[-a-zA-Z0-9_]+$/)) return
+            variables.add(subscription.variableName)
+            if (callerId === null || callerId === subscriptionId) {
+                defaultValues[subscription.variableName] = ''
+            }
+        })
+        let variableDefinitions = [{ name: 'Timestamp when last data was received', variableId: 'lastDataReceived' }]
+        variables.forEach((variable) => {
+            variableDefinitions.push({ name: variable, variableId: variable })
+        })
+        this.setVariableDefinitions(variableDefinitions)
+        if (this.config.reset_variables) {
+            this.setVariableValues(defaultValues)
+        }
+    }
+
+    maybeReconnect() {
+        if (this.isInitialized && this.config.reconnect) {
+            if (this.reconnect_timer) clearTimeout(this.reconnect_timer)
+            this.reconnect_timer = setTimeout(() => {
+                this.initWebSocket()
+            }, 5000)
+        }
+    }
+
+    initWebSocket() {
+        if (this.reconnect_timer) {
+            clearTimeout(this.reconnect_timer)
+            this.reconnect_timer = null
+        }
         if (this.ping_timer) {
             clearInterval(this.ping_timer)
             this.ping_timer = null
         }
 
-        if (this.config.ping_enabled && this.ws?.readyState === WebSocket.OPEN) {
-            this.ping_timer = setInterval(() => {
-                if (this.ws?.readyState === WebSocket.OPEN) {
-                    this.ws.send(this.hexToBuffer(this.config.ping_hex || '00'))
-                    if (this.config.debug_messages) {
-                        this.log('debug', `Ping sent: ${this.config.ping_hex || '00'}`)
-                    }
-                }
-            }, this.config.ping_interval || 3000)
+        const url = this.config.url
+        if (!url || url.match(new RegExp(this.wsRegex)) === null) {
+            this.updateStatus(InstanceStatus.BadConfig, `WS URL is not defined or invalid`)
+            return
         }
+
+        this.updateStatus(InstanceStatus.Connecting)
+
+        if (this.ws) {
+            this.ws.close(1000)
+            delete this.ws
+        }
+
+        const userAgents = {
+            chrome: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            firefox: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0',
+            safari: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15',
+            custom: this.config.user_agent_custom || '',
+        }
+
+        const selectedUA = userAgents[this.config.user_agent]
+        
+        // [H2 FIX] Lógica de Origin dinâmica para suportar WSS (https)
+        let wsOptions = {}
+        if (selectedUA) {
+            const urlObj = new URL(url)
+            const originProtocol = urlObj.protocol === 'wss:' ? 'https' : 'http'
+            wsOptions = {
+                headers: {
+                    Origin: `${originProtocol}://${urlObj.hostname}`,
+                    'User-Agent': selectedUA,
+                },
+            }
+        }
+
+        this.ws = new WebSocket(url, wsOptions)
+
+        this.ws.on('open', () => {
+            this.updateStatus(InstanceStatus.Ok)
+            this.log('debug', `Connection opened`)
+            if (this.config.reset_variables) this.updateVariables()
+
+            if (this.config.ping_enabled) {
+                this.ping_timer = setInterval(() => {
+                    if (this.ws?.readyState === WebSocket.OPEN) {
+                        this.ws.send(this.hexToBuffer(this.config.ping_hex || '00'), (err) => {
+                            if (err) this.log('error', `Ping send failed: ${err.message}`)
+                        })
+                        if (this.config.debug_messages) {
+                            this.log('debug', `Ping sent: ${this.config.ping_hex || '00'}`)
+                        }
+                    }
+                }, this.config.ping_interval || 3000)
+            }
+        })
+
+        this.ws.on('close', (code) => {
+            this.log('debug', `Connection closed with code ${code}`)
+            this.updateStatus(InstanceStatus.Disconnected, `Connection closed with code ${code}`)
+            if (this.ping_timer) {
+                clearInterval(this.ping_timer)
+                this.ping_timer = null
+            }
+            this.maybeReconnect()
+        })
+
+        this.ws.on('message', this.messageReceivedFromWebSocket.bind(this))
+
+        this.ws.on('error', (data) => {
+            this.log('error', `WebSocket error: ${data}`)
+        })
     }
-
-    if (oldconfig['url'] !== config['url']) this.initWebSocket()
-	}
-
-	hexToBuffer(hexString) {
-		return Buffer.from(hexString.replace(/[^0-9a-fA-F]/g, ''), 'hex')
-	}
-
-	updateVariables(callerId = null) {
-		let variables = new Set()
-		let defaultValues = {}
-		this.subscriptions.forEach((subscription, subscriptionId) => {
-			if (!subscription.variableName.match(/^[-a-zA-Z0-9_]+$/)) {
-				return
-			}
-			variables.add(subscription.variableName)
-			if (callerId === null || callerId === subscriptionId) {
-				defaultValues[subscription.variableName] = ''
-			}
-		})
-		let variableDefinitions = [{ name: 'Timestamp when last data was received', variableId: 'lastDataReceived' }]
-		variables.forEach((variable) => {
-			variableDefinitions.push({
-				name: variable,
-				variableId: variable,
-			})
-		})
-		this.setVariableDefinitions(variableDefinitions)
-		if (this.config.reset_variables) {
-			this.setVariableValues(defaultValues)
-		}
-	}
-
-	maybeReconnect() {
-		if (this.isInitialized && this.config.reconnect) {
-			if (this.reconnect_timer) {
-				clearTimeout(this.reconnect_timer)
-			}
-			this.reconnect_timer = setTimeout(() => {
-				this.initWebSocket()
-			}, 5000)
-		}
-	}
-
-	initWebSocket() {
-		if (this.reconnect_timer) {
-			clearTimeout(this.reconnect_timer)
-			this.reconnect_timer = null
-		}
-		if (this.ping_timer) {
-			clearInterval(this.ping_timer)
-			this.ping_timer = null
-		}
-
-		const url = this.config.url
-		if (!url || url.match(new RegExp(this.wsRegex)) === null) {
-			this.updateStatus(InstanceStatus.BadConfig, `WS URL is not defined or invalid`)
-			return
-		}
-
-		this.updateStatus(InstanceStatus.Connecting)
-
-		if (this.ws) {
-			this.ws.close(1000)
-			delete this.ws
-		}
-
-		// User Agent
-		const userAgents = {
-			chrome: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-			firefox: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0',
-			safari: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15',
-			custom: this.config.user_agent_custom || '',
-		}
-
-		const selectedUA = userAgents[this.config.user_agent]
-		const wsOptions = selectedUA
-			? {
-					headers: {
-						Origin: `http://${new URL(url).hostname}`,
-						'User-Agent': selectedUA,
-					},
-				}
-			: {}
-
-		this.ws = new WebSocket(url, wsOptions)
-
-		this.ws.on('open', () => {
-			this.updateStatus(InstanceStatus.Ok)
-			this.log('debug', `Connection opened`)
-			if (this.config.reset_variables) {
-				this.updateVariables()
-			}
-
-			if (this.config.ping_enabled) {
-				this.ping_timer = setInterval(() => {
-					if (this.ws?.readyState === WebSocket.OPEN) {
-						this.ws.send(this.hexToBuffer(this.config.ping_hex || '00'))
-						if (this.config.debug_messages) {
-							this.log('debug', `Ping sent: ${this.config.ping_hex || '00'}`)
-						}
-					}
-				}, this.config.ping_interval || 3000)
-			}
-		})
-
-		this.ws.on('close', (code) => {
-			this.log('debug', `Connection closed with code ${code}`)
-			this.updateStatus(InstanceStatus.Disconnected, `Connection closed with code ${code}`)
-			if (this.ping_timer) {
-				clearInterval(this.ping_timer)
-				this.ping_timer = null
-			}
-			this.maybeReconnect()
-		})
-
-		this.ws.on('message', this.messageReceivedFromWebSocket.bind(this))
-
-		this.ws.on('error', (data) => {
-			this.log('error', `WebSocket error: ${data}`)
-		})
-	}
 
 	messageReceivedFromWebSocket(data) {
 		if (this.config.debug_messages) {
